@@ -3,6 +3,7 @@
     "name": "game",
     "slug": "game",
     "version": "1.0.0",
+    "newArchEnabled": true,
 
     "scheme": "game",
     "web": {
