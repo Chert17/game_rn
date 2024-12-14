@@ -1,4 +1,4 @@
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import { useGameContext } from '~/providers/GameContext';
 
@@ -16,7 +16,7 @@ export const Block = ({ index }: { index: number }) => {
       width: block.w,
       height: block.w,
       left: block.x,
-      top: block.y,
+      top: withTiming(block.y),
       display: 'flex',
       backgroundColor: '#F5B52F',
       position: 'absolute',

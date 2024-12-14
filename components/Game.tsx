@@ -1,18 +1,19 @@
-import { FC } from 'react';
-import { Button, SafeAreaView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { FC, useState } from 'react';
+import { Alert, SafeAreaView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { Ball } from './Ball';
 import { Block } from './Block';
 
-import { ballRadius, boardHeight } from '~/constants';
+import { ballRadius, blockW, boardHeight } from '~/constants';
 import { GameContext } from '~/providers/GameContext';
-import { BallData } from '~/types';
+import { BallData, BlockData } from '~/types';
 import { generateBlocksRow } from '~/utils/generateBlocksRow';
 
 export const Game: FC = () => {
   const { width } = useWindowDimensions();
+  const [score, setScore] = useState(1);
 
   const ball = useSharedValue<BallData>({
     x: width / 2,
@@ -22,18 +23,70 @@ export const Game: FC = () => {
     dy: -1,
   });
 
+  const blocks = useSharedValue<BlockData[]>(
+    Array(3)
+      .fill(0)
+      .flatMap((_, row) => generateBlocksRow(row + 1))
+  );
+
   const isUserTurn = useSharedValue(true);
 
-  const onEndTurn = () => {
-    'worklet'; // work with only animation object
-    if (isUserTurn.value) return;
+  const incrementScore = () => {
+    setScore((s) => s + 1);
+  };
 
+  const onGameOver = () => {
+    Alert.alert('Game over', 'Score: ' + score, [
+      {
+        text: 'Restart',
+        onPress: () => {
+          blocks.value = [];
+
+          blocks.value = Array(3)
+            .fill(0)
+            .flatMap((_, row) => generateBlocksRow(row + 1));
+
+          setScore(1);
+        },
+      },
+    ]);
+  };
+
+  const onEndTurn = () => {
+    'worklet';
+    if (isUserTurn.value) {
+      return;
+    }
     isUserTurn.value = true;
+
+    // check if game is over
+    const gameOver = blocks.value.some(
+      (block) => block.val > 0 && block.y + 2 * (blockW + 10) > boardHeight
+    );
+    if (gameOver) {
+      console.log('game over');
+      runOnJS(onGameOver)();
+      return;
+    }
+
+    blocks.modify((blocks) => {
+      blocks.forEach((block) => {
+        block.y += blockW + 10;
+      });
+
+      blocks.push(...generateBlocksRow(1));
+
+      return blocks;
+    });
+
+    runOnJS(incrementScore)();
   };
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
-      if (!isUserTurn.value) return;
+      if (!isUserTurn.value) {
+        return;
+      }
 
       const x = e.translationX;
       const y = e.translationY;
@@ -53,30 +106,31 @@ export const Game: FC = () => {
     });
 
   const pathStyle = useAnimatedStyle(() => {
-    const { x, y, dx, dy } = ball!.value;
-
+    const { x, y, dx, dy } = ball.value;
     const angle = Math.atan2(-dx, dy);
 
     return {
-      display: isUserTurn!.value && dy < 0 ? 'flex' : 'none',
+      display: isUserTurn.value ? 'flex' : 'none',
       top: y,
       left: x,
-      transform: [{ rotate: `${angle}rad` }],
+      transform: [
+        {
+          rotate: `${angle}rad`,
+        },
+      ],
     };
   });
-
-  const blocks = useSharedValue(
-    Array(3)
-      .fill(0)
-      .flatMap((_, row) => generateBlocksRow(row + 1))
-  );
 
   return (
     <GameContext.Provider value={{ ball, isUserTurn, onEndTurn, blocks }}>
       <GestureDetector gesture={pan}>
         <SafeAreaView style={styles.container}>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ fontSize: 40, fontWeight: 'bold', color: 'gray' }}>{score}</Text>
+          </View>
+
           <View style={styles.board}>
-            {blocks!.value.map((_, index) => (
+            {blocks.value.map((_, index) => (
               <Block key={index} index={index} />
             ))}
 
@@ -84,7 +138,6 @@ export const Game: FC = () => {
 
             <Animated.View style={[styles.ballTrajectory, pathStyle]} />
           </View>
-          <Button title="Launch" onPress={() => (isUserTurn.value = false)} />
         </SafeAreaView>
       </GestureDetector>
     </GameContext.Provider>
